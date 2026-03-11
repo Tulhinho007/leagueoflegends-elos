@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Kamaelzinho — A lenda</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Exo+2:wght@400;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
 <style>
 :root {
@@ -300,6 +301,7 @@ footer span{color:var(--accent);}
     <button id="clear-btn" class="hdr-btn hdr-btn-orange" onclick="clearAllData()">
       &#128465; Limpar Tudo
     </button>
+    <span id="sync-status" style="font-family:'Share Tech Mono',monospace;font-size:.68rem;color:#16a34a;white-space:nowrap;">&#9679; Online</span>
   </div>
 </header>
 <div class="app-body">
@@ -557,8 +559,10 @@ document.addEventListener('click',function(){
   document.querySelectorAll('.elo-selector.open').forEach(function(s){s.classList.remove('open');});
 });
 
-// ── LOCALSTORAGE ─────────────────────────────────────────────────────
-var LS_PLAYERS='kama_players',LS_MD5='kama_md5',LS_HISTORY='kama_history';
+// ── SUPABASE ──────────────────────────────────────────────────────────
+var SUPA_URL='https://yqpwnlxzbytlzndtrpkz.supabase.co';
+var SUPA_KEY='sb_publishable_0hCHePrExPGdleyTP80GNA_-GtPpyHQ';
+var db=supabase.createClient(SUPA_URL,SUPA_KEY);
 
 var DEFAULT_PLAYERS=[
   {nick:"F\u00e3 da Tawna#kama",w:50,l:55,lp:0,elo:"Platina II",nickRed:false,punText:"Ban 14 dias \u2014 18 Marc"},
@@ -579,35 +583,80 @@ var DEFAULT_MD5=[
   {nick:"Risen in Glory #kama",elo:"Ouro IV",eloTier:"tier-ouro",w:3,l:2,lp:55}
 ];
 
+// Debounce — só salva 1s depois da ultima mudança (evita spam na API)
+var saveTimer=null;
 function autoSave(){
-  try{
-    localStorage.setItem(LS_PLAYERS,JSON.stringify(players));
-    localStorage.setItem(LS_MD5,JSON.stringify(md5Cards));
-    localStorage.setItem(LS_HISTORY,JSON.stringify(playerHistory));
-  }catch(e){}
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(function(){pushToSupabase();},1000);
 }
 
-function loadSavedData(){
+function pushToSupabase(){
+  db.from('kama_players').update({data:players}).eq('id',1).then(function(r){if(r.error)console.warn('save players:',r.error.message);});
+  db.from('kama_md5').update({data:md5Cards}).eq('id',1).then(function(r){if(r.error)console.warn('save md5:',r.error.message);});
+  db.from('kama_history').update({data:playerHistory}).eq('id',1).then(function(r){if(r.error)console.warn('save history:',r.error.message);});
+  setSyncStatus('saved');
+}
+
+function setSyncStatus(state){
+  var el=document.getElementById('sync-status');
+  if(!el)return;
+  if(state==='saving'){el.textContent='&#9679; Salvando...';el.style.color='#ca8a04';}
+  else if(state==='saved'){el.textContent='&#9679; Salvo';el.style.color='#16a34a';setTimeout(function(){el.textContent='&#9679; Online';el.style.color='#16a34a';},2000);}
+  else if(state==='offline'){el.textContent='&#9679; Offline';el.style.color='#dc2626';}
+  else{el.textContent='&#9679; Online';el.style.color='#16a34a';}
+}
+
+function applyLoadedData(sp,sm,sh){
+  if(sp&&sp.length>0){players.length=0;sp.forEach(function(p){players.push(p);});}
+  if(sm&&sm.length>0){md5Cards.length=0;sm.forEach(function(c){md5Cards.push(c);});}
+  if(sh&&Object.keys(sh).length>0){Object.keys(sh).forEach(function(k){playerHistory[k]=sh[k];});}
+}
+
+function fullRerender(){
+  tbody.innerHTML='';
+  players.forEach(function(p,i){tbody.appendChild(buildPlayerRow(p,i));});
+  renderMd5Cards();buildSidebar(currentPlayerNick);updateSummary();
+}
+
+async function loadSavedData(){
   try{
-    var sp=localStorage.getItem(LS_PLAYERS);
-    var sm=localStorage.getItem(LS_MD5);
-    var sh=localStorage.getItem(LS_HISTORY);
-    if(sp){
-      var saved=JSON.parse(sp);
-      players.length=0;
-      saved.forEach(function(p){players.push(p);});
-    }
-    if(sm){
-      var savedM=JSON.parse(sm);
-      md5Cards.length=0;
-      savedM.forEach(function(c){md5Cards.push(c);});
-    }
-    if(sh){
-      var savedH=JSON.parse(sh);
-      Object.keys(savedH).forEach(function(k){playerHistory[k]=savedH[k];});
-    }
-    return !!(sp||sm);
-  }catch(e){return false;}
+    var rp=await db.from('kama_players').select('data').eq('id',1).single();
+    var rm=await db.from('kama_md5').select('data').eq('id',1).single();
+    var rh=await db.from('kama_history').select('data').eq('id',1).single();
+    var sp=rp.data?rp.data.data:null;
+    var sm=rm.data?rm.data.data:null;
+    var sh=rh.data?rh.data.data:null;
+    applyLoadedData(sp,sm,sh);
+    setSyncStatus('online');
+    return true;
+  }catch(e){
+    console.warn('Supabase load failed, using defaults',e);
+    setSyncStatus('offline');
+    return false;
+  }
+}
+
+// Realtime — viewers veem mudanças ao vivo sem precisar recarregar
+function subscribeRealtime(){
+  db.channel('kama-live')
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'kama_players'},function(payload){
+      if(!payload.new||!payload.new.data)return;
+      players.length=0;payload.new.data.forEach(function(p){players.push(p);});
+      tbody.innerHTML='';players.forEach(function(p,i){tbody.appendChild(buildPlayerRow(p,i));});
+      updateSummary();buildSidebar(currentPlayerNick);
+    })
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'kama_md5'},function(payload){
+      if(!payload.new||!payload.new.data)return;
+      md5Cards.length=0;payload.new.data.forEach(function(c){md5Cards.push(c);});
+      renderMd5Cards();
+    })
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'kama_history'},function(payload){
+      if(!payload.new||!payload.new.data)return;
+      Object.keys(playerHistory).forEach(function(k){delete playerHistory[k];});
+      Object.keys(payload.new.data).forEach(function(k){playerHistory[k]=payload.new.data[k];});
+      if(currentPlayerNick){renderPlayerHistoryTable();updatePlayerStats();}
+    })
+    .subscribe();
 }
 
 var BTN_ORIG={
@@ -632,6 +681,7 @@ function resetToDefaults(){
     tbody.innerHTML='';
     players.forEach(function(p,i){tbody.appendChild(buildPlayerRow(p,i));});
     renderMd5Cards();buildSidebar(null);updateSummary();
+    pushToSupabase();
     showActionFeedback('reset-btn','&#10003; Restaurado!');
   } else {
     btn.dataset.confirming='1';
@@ -823,12 +873,18 @@ function updateSummary(){
   document.getElementById('stat-total-jogos').textContent=tj;
 }
 
-// Initial render — load saved data first, then render
+// Initial render — load from Supabase first
 var playerHistory={},currentPlayerNick=null;
-loadSavedData();
-players.forEach(function(p,i){tbody.appendChild(buildPlayerRow(p,i));});
-updateSummary();
-renderMd5Cards();
+
+(async function(){
+  setSyncStatus('saving');
+  await loadSavedData();
+  players.forEach(function(p,i){tbody.appendChild(buildPlayerRow(p,i));});
+  updateSummary();
+  renderMd5Cards();
+  buildSidebar(null);
+  subscribeRealtime();
+})();
 
 // YEAR SYSTEM
 var BASE_YEAR=2026,currentYear=2026;
