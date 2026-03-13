@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Kamaelzinho — A lenda</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Exo+2:wght@400;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
 <style>
 :root {
@@ -634,7 +634,7 @@ document.addEventListener('click',function(){
 // ── SUPABASE ──────────────────────────────────────────────────────────
 var SUPA_URL='https://yqpwnlxzbytlzndtrpkz.supabase.co';
 var SUPA_KEY='sb_publishable_0hCHePrExPGdleyTP80GNA_-GtPpyHQ';
-var db=supabase.createClient(SUPA_URL,SUPA_KEY);
+var db=supabase.createClient(SUPA_URL,SUPA_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
 
 var DEFAULT_PLAYERS=[
   {nick:"F\u00e3 da Tawna#kama",w:50,l:55,lp:0,elo:"Platina II",nickRed:false,punText:"Ban 14 dias \u2014 18 Marc"},
