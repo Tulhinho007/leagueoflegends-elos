@@ -490,7 +490,29 @@ footer span{color:var(--accent);}
       <div class="mini-card"><div class="mc-val mc-days" id="md-days">0</div><div class="mc-lbl">Dias Jogados</div></div>
     </div>
     <div class="player-table-section">
-      <button class="add-row-btn" onclick="addPlayerHistoryRow()">&#65291; Adicionar Linha</button>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+        <button class="add-row-btn" style="margin-bottom:0" onclick="addPlayerHistoryRow()">&#65291; Adicionar Linha</button>
+        <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
+          <span style="font-family:'Share Tech Mono',monospace;font-size:.7rem;color:var(--muted);letter-spacing:.08em;">FILTRAR MÊS</span>
+          <select id="month-filter" onchange="applyMonthFilter()" style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-family:'Rajdhani',sans-serif;font-size:.88rem;font-weight:700;color:var(--text);outline:none;cursor:pointer;transition:border-color .15s;">
+            <option value="0">Todos</option>
+            <option value="1">Janeiro</option>
+            <option value="2">Fevereiro</option>
+            <option value="3">Março</option>
+            <option value="4">Abril</option>
+            <option value="5">Maio</option>
+            <option value="6">Junho</option>
+            <option value="7">Julho</option>
+            <option value="8">Agosto</option>
+            <option value="9">Setembro</option>
+            <option value="10">Outubro</option>
+            <option value="11">Novembro</option>
+            <option value="12">Dezembro</option>
+          </select>
+          <button onclick="clearMonthFilter()" id="clear-filter-btn" style="display:none;background:none;border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-family:'Rajdhani',sans-serif;font-size:.82rem;font-weight:700;color:var(--muted);cursor:pointer;transition:color .15s,border-color .15s;" onmouseover="this.style.color='var(--red)';this.style.borderColor='var(--red)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border)'">&#10005; Limpar</button>
+        </div>
+      </div>
+      <div id="filter-info" style="display:none;font-family:'Share Tech Mono',monospace;font-size:.72rem;color:var(--accent);margin-bottom:8px;padding:6px 10px;background:rgba(0,194,255,.06);border:1px solid rgba(0,194,255,.15);border-radius:6px;"></div>
       <div class="table-wrap">
         <table class="player-tbl">
           <thead><tr>
@@ -1124,6 +1146,12 @@ function buildSidebar(activeNick){
 
 function openPlayerPage(nick){
   currentPlayerNick=nick;
+  var sel=document.getElementById('month-filter');
+  if(sel){sel.value='0';}
+  var info=document.getElementById('filter-info');
+  if(info){info.style.display='none';}
+  var clearBtn=document.getElementById('clear-filter-btn');
+  if(clearBtn){clearBtn.style.display='none';}
   document.getElementById('player-page-nick').textContent=nick;
   if(!playerHistory[nick])playerHistory[nick]=[];
   renderPlayerHistoryTable();updatePlayerStats();buildSidebar(nick);
@@ -1144,6 +1172,51 @@ function addPlayerHistoryRow(){
     dia:today.getDate(),mes:today.getMonth()+1,ano:today.getFullYear()});
   renderPlayerHistoryTable();updatePlayerStats();autoSave();
 }
+function applyMonthFilter(){
+  var sel=document.getElementById('month-filter');
+  var val=parseInt(sel.value);
+  var info=document.getElementById('filter-info');
+  var clearBtn=document.getElementById('clear-filter-btn');
+  var meses=['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  if(val===0){
+    clearBtn.style.display='none';
+    info.style.display='none';
+    renderPlayerHistoryTable();
+    updatePlayerStats();
+    return;
+  }
+  clearBtn.style.display='inline-flex';
+  var rows=playerHistory[currentPlayerNick]||[];
+  var filtered=rows.filter(function(r){return parseInt(r.mes)===val;});
+  var tw=filtered.reduce(function(s,r){return s+(r.w||0);},0);
+  var tl=filtered.reduce(function(s,r){return s+(r.l||0);},0);
+  var wr=tw+tl>0?(tw/(tw+tl)*100).toFixed(1)+'%':'—';
+  info.style.display='block';
+  info.innerHTML='&#128197; <b>'+meses[val]+'</b> — '+filtered.length+' dias | '+tw+'W / '+tl+'L | '+wr+' WR';
+  // Render only filtered rows
+  var html='';
+  filtered.forEach(function(r,i){
+    var ri=rows.indexOf(r);
+    var sn=(r.nick||'').replace(/"/g,'&quot;');
+    html+='<tr data-ridx="'+ri+'">'
+      +'<td><input class="p-input" type="text" value="'+sn+'" oninput="updateHistoryField('+ri+',\'nick\',this.value)" placeholder="Nick"/></td>'
+      +'<td style="text-align:center"><input class="p-input" type="number" min="0" value="'+r.w+'" oninput="updateHistoryField('+ri+',\'w\',this.value)" style="color:var(--green);max-width:60px"/></td>'
+      +'<td style="text-align:center"><input class="p-input" type="number" min="0" value="'+r.l+'" oninput="updateHistoryField('+ri+',\'l\',this.value)" style="color:var(--red);max-width:60px"/></td>'
+      +'<td class="total-cell">'+(r.w+r.l)+'</td>'
+      +'<td><input class="p-input" type="number" min="1" max="31" value="'+r.dia+'" oninput="updateHistoryField('+ri+',\'dia\',this.value)" style="max-width:50px;text-align:center"/></td>'
+      +'<td><input class="p-input" type="number" min="1" max="12" value="'+r.mes+'" oninput="updateHistoryField('+ri+',\'mes\',this.value)" style="max-width:50px;text-align:center"/></td>'
+      +'<td><input class="p-input" type="number" min="2020" max="2099" value="'+r.ano+'" oninput="updateHistoryField('+ri+',\'ano\',this.value)" style="max-width:68px;text-align:center"/></td>'
+      +'<td style="white-space:nowrap"><button class="row-save-btn" onclick="saveHistoryRow('+ri+',this)" title="Salvar">&#128190;</button><button class="del-btn" onclick="deleteHistoryRow('+ri+')" title="Remover">&#10005;</button></td>'
+      +'</tr>';
+  });
+  document.getElementById('player-history-tbody').innerHTML=html;
+}
+
+function clearMonthFilter(){
+  document.getElementById('month-filter').value='0';
+  applyMonthFilter();
+}
+
 function saveHistoryRow(idx,btn){
   autoSave();
   btn.innerHTML='&#10003;';
