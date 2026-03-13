@@ -4,7 +4,6 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Kamaelzinho — A lenda</title>
-<script src="https://unpkg.com/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Exo+2:wght@400;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
 <style>
 :root {
@@ -632,9 +631,76 @@ document.addEventListener('click',function(){
 });
 
 // ── SUPABASE ──────────────────────────────────────────────────────────
+// ── SUPABASE REST DIRETO (sem biblioteca externa) ─────────────────────────────
 var SUPA_URL='https://yqpwnlxzbytlzndtrpkz.supabase.co';
 var SUPA_KEY='sb_publishable_0hCHePrExPGdleyTP80GNA_-GtPpyHQ';
-var db=supabase.createClient(SUPA_URL,SUPA_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
+
+var db={
+  _headers:{
+    'Content-Type':'application/json',
+    'apikey':SUPA_KEY,
+    'Authorization':'Bearer '+SUPA_KEY,
+    'Prefer':'return=minimal'
+  },
+  _base:SUPA_URL+'/rest/v1/',
+
+  from:function(table){
+    var self=this;
+    return{
+      select:function(cols){
+        return{
+          eq:function(col,val){
+            return{
+              single:async function(){
+                var url=self._base+table+'?select='+(cols||'*')+'&'+col+'=eq.'+val+'&limit=1';
+                var r=await fetch(url,{headers:self._headers});
+                if(!r.ok)return{data:null,error:{message:await r.text()}};
+                var arr=await r.json();
+                return{data:arr[0]||null,error:null};
+              }
+            };
+          }
+        };
+      },
+      update:function(body){
+        return{
+          eq:async function(col,val){
+            var url=self._base+table+'?'+col+'=eq.'+val;
+            var r=await fetch(url,{method:'PATCH',headers:self._headers,body:JSON.stringify(body)});
+            if(!r.ok)return{error:{message:await r.text()}};
+            return{error:null};
+          }
+        };
+      }
+    };
+  },
+
+  channel:function(name){
+    // Realtime via EventSource (Supabase Realtime WebSocket não precisa de lib)
+    var handlers=[];
+    return{
+      on:function(evt,filter,cb){
+        handlers.push({filter:filter,cb:cb});
+        return this;
+      },
+      subscribe:function(){
+        // Polling leve a cada 5s como fallback sem WebSocket
+        setInterval(async function(){
+          try{
+            var rp=await db.from('kama_players').select('data').eq('id',1).single();
+            var rm=await db.from('kama_md5').select('data').eq('id',1).single();
+            var rh=await db.from('kama_history').select('data').eq('id',1).single();
+            handlers.forEach(function(h){
+              if(h.filter.table==='kama_players'&&rp.data)h.cb({new:rp.data});
+              if(h.filter.table==='kama_md5'&&rm.data)h.cb({new:rm.data});
+              if(h.filter.table==='kama_history'&&rh.data)h.cb({new:rh.data});
+            });
+          }catch(e){}
+        },5000);
+      }
+    };
+  }
+};
 
 var DEFAULT_PLAYERS=[
   {nick:"F\u00e3 da Tawna#kama",w:50,l:55,lp:0,elo:"Platina II",nickRed:false,punText:"Ban 14 dias \u2014 18 Marc"},
@@ -726,22 +792,32 @@ async function loadSavedData(){
   }
 }
 
-// Realtime — viewers veem mudanças ao vivo sem precisar recarregar
+// Realtime — polling a cada 5s para viewers verem mudanças ao vivo
+var _lastPlayers='',_lastMd5='',_lastHistory='';
 function subscribeRealtime(){
   db.channel('kama-live')
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'kama_players'},function(payload){
       if(!payload.new||!payload.new.data)return;
+      var str=JSON.stringify(payload.new.data);
+      if(str===_lastPlayers)return;
+      _lastPlayers=str;
       players.length=0;payload.new.data.forEach(function(p){players.push(p);});
       tbody.innerHTML='';players.forEach(function(p,i){tbody.appendChild(buildPlayerRow(p,i));});
       updateSummary();buildSidebar(currentPlayerNick);
     })
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'kama_md5'},function(payload){
       if(!payload.new||!payload.new.data)return;
+      var str=JSON.stringify(payload.new.data);
+      if(str===_lastMd5)return;
+      _lastMd5=str;
       md5Cards.length=0;payload.new.data.forEach(function(c){md5Cards.push(c);});
       renderMd5Cards();
     })
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'kama_history'},function(payload){
       if(!payload.new||!payload.new.data)return;
+      var str=JSON.stringify(payload.new.data);
+      if(str===_lastHistory)return;
+      _lastHistory=str;
       Object.keys(playerHistory).forEach(function(k){delete playerHistory[k];});
       Object.keys(payload.new.data).forEach(function(k){playerHistory[k]=payload.new.data[k];});
       if(currentPlayerNick){renderPlayerHistoryTable();updatePlayerStats();}
