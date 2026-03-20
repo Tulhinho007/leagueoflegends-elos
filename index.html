@@ -6,6 +6,37 @@
 <title>Kamaelzinho — A lenda</title>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Exo+2:wght@400;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
 <style>
+/* ══ LOGIN SCREEN ══════════════════════════════════════════════ */
+#login-screen{position:fixed;inset:0;z-index:9999;background:#0f1117;
+  display:flex;align-items:center;justify-content:center;
+  background-image:radial-gradient(ellipse at 15% 0%,rgba(0,194,255,.07) 0%,transparent 55%),
+    radial-gradient(ellipse at 85% 100%,rgba(245,158,11,.05) 0%,transparent 55%);}
+body.light-mode #login-screen{background:#f0f4f8;}
+.login-box{background:#1a2035;border:1px solid #252d42;border-radius:16px;
+  padding:40px 44px;display:flex;flex-direction:column;align-items:center;gap:20px;
+  box-shadow:0 24px 64px rgba(0,0,0,.5);min-width:320px;}
+body.light-mode .login-box{background:#fff;border-color:#cbd5e1;}
+.login-logo{font-family:'Rajdhani',sans-serif;font-size:1.7rem;font-weight:700;
+  letter-spacing:.18em;text-transform:uppercase;color:#e2e8f4;text-align:center;}
+body.light-mode .login-logo{color:#1e293b;}
+.login-logo span{color:#00c2ff;text-shadow:0 0 20px rgba(0,194,255,.5);}
+.login-sub{font-family:'Share Tech Mono',monospace;font-size:.68rem;color:#5a6a85;
+  letter-spacing:.12em;text-transform:uppercase;margin-top:-10px;}
+.login-input{width:100%;border:1px solid #252d42;border-radius:8px;padding:11px 16px;
+  font-family:'Share Tech Mono',monospace;font-size:1rem;color:#e2e8f4;outline:none;
+  background:#161b26;transition:border-color .15s,box-shadow .15s;text-align:center;letter-spacing:.2em;}
+body.light-mode .login-input{background:#f0f4f8;border-color:#cbd5e1;color:#1e293b;}
+.login-input:focus{border-color:#00c2ff;box-shadow:0 0 0 3px rgba(0,194,255,.12);}
+.login-btn{width:100%;padding:12px;font-family:'Rajdhani',sans-serif;font-size:1rem;
+  font-weight:700;letter-spacing:.12em;background:linear-gradient(135deg,#0077aa,#00c2ff);
+  color:#fff;border:none;border-radius:8px;cursor:pointer;
+  transition:transform .15s,box-shadow .15s,filter .15s;box-shadow:0 4px 16px rgba(0,194,255,.25);}
+.login-btn:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,194,255,.4);filter:brightness(1.1);}
+.login-btn:active{transform:translateY(0);}
+.login-error{font-family:'Share Tech Mono',monospace;font-size:.75rem;color:#f43f5e;
+  background:rgba(244,63,94,.1);border:1px solid rgba(244,63,94,.25);
+  border-radius:6px;padding:7px 14px;display:none;text-align:center;}
+.login-error.show{display:block;}
 :root {
   --bg:#0f1117;--bg2:#161b26;--card:#1a2035;--border:#252d42;--border2:#2e3a54;
   --text:#e2e8f4;--muted:#5a6a85;--accent:#00c2ff;--accent2:#0077aa;
@@ -244,6 +275,17 @@ footer span{color:var(--accent);}
 </head>
 <body>
 
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo"><span>Kamaelzinho</span> — A lenda</div>
+    <div class="login-sub">&#128274; Acesso restrito</div>
+    <input class="login-input" id="login-input" type="password" placeholder="••••••••" maxlength="30" onkeydown="if(event.key==='Enter')checkLogin()"/>
+    <button class="login-btn" onclick="checkLogin()">ENTRAR</button>
+    <div class="login-error" id="login-error">&#10007; Senha incorreta</div>
+  </div>
+</div>
+
 <!-- HOME PAGE -->
 <div id="page-home" class="page active">
 <header>
@@ -389,6 +431,24 @@ footer span{color:var(--accent);}
 </div><!-- /page-player -->
 
 <script>
+// ══ LOGIN ════════════════════════════════════════════════════════
+(function(){
+  try{ if(sessionStorage.getItem('kama-auth')==='ok') document.getElementById('login-screen').style.display='none'; }catch(e){}
+})();
+function checkLogin(){
+  var inp=document.getElementById('login-input');
+  var err=document.getElementById('login-error');
+  if(inp.value==='kama'){
+    try{sessionStorage.setItem('kama-auth','ok');}catch(e){}
+    document.getElementById('login-screen').style.display='none';
+    inp.value='';
+  }else{
+    err.classList.add('show');
+    inp.value='';inp.focus();
+    setTimeout(function(){err.classList.remove('show');},2500);
+  }
+}
+
 // ══ TEMA ════════════════════════════════════════════════════════
 (function(){try{if(localStorage.getItem('kama-theme')==='light')document.body.classList.add('light-mode');}catch(e){}})();
 function toggleTheme(){
